@@ -1,170 +1,29 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-use pcap::Capture;
-use pnet::{
-    datalink,
-    ipnetwork::IpNetwork,
-    transport::{
-        icmp_packet_iter, transport_channel, TransportChannelType::Layer4, TransportProtocol,
-    },
+use pnet::transport::{
+    icmp_packet_iter, transport_channel, TransportChannelType::Layer4, TransportProtocol,
 };
 use pnet_packet::{
-    icmp::{echo_request, IcmpTypes},
+    icmp::IcmpTypes,
     ip::IpNextHeaderProtocols::{self},
-    ipv4::{checksum as ipv4_checksum, Ipv4Packet, MutableIpv4Packet},
-    tcp::{ipv4_checksum as tcp_ipv4_checksum, MutableTcpPacket, TcpFlags},
-    Packet,
 };
 use rand::{thread_rng, Rng};
 use serde_json::json;
 use tokio::time::sleep;
 
 use crate::logger::{ev, Logger};
+use crate::recon::net::{build_echo_request, wait_for_syn_reply_pcap};
+
+use super::net::send_one_syn;
 
 pub struct ScanConfig {
     pub iface: String,
     pub delay_ms: u64,
     pub jitter_ms: u64,
     pub ports: Vec<u16>,
-}
-
-pub fn iface_ipv4(name: &str) -> Option<Ipv4Addr> {
-    let iface = datalink::interfaces()
-        .into_iter()
-        .find(|i| i.name == name)?;
-    for ip in iface.ips {
-        if let IpNetwork::V4(v4) = ip {
-            return Some(v4.ip());
-        }
-    }
-    None
-}
-
-fn build_echo_request<'a>(buf: &'a mut [u8]) -> echo_request::MutableEchoRequestPacket<'a> {
-    let mut echo = echo_request::MutableEchoRequestPacket::new(buf).unwrap();
-    echo.set_icmp_type(IcmpTypes::EchoRequest);
-    echo.set_identifier(0x1337);
-    echo.set_sequence_number(1);
-    let csum = pnet::packet::util::checksum(echo.packet(), 1);
-    echo.set_checksum(csum);
-    echo
-}
-
-fn build_ipv4_tcp_syn<'a>(
-    buf: &'a mut [u8],
-    sip: Ipv4Addr,
-    dip: Ipv4Addr,
-    sport: u16,
-    dport: u16,
-) -> MutableIpv4Packet<'a> {
-    let total_len = 20 + 20;
-    assert!(buf.len() >= total_len, "buffer too small for IPv4+TCP");
-    {
-        let tcp_buf = &mut buf[20..total_len];
-        let mut tcp = MutableTcpPacket::new(tcp_buf).unwrap();
-        tcp.set_source(sport);
-        tcp.set_destination(dport);
-        tcp.set_sequence(0);
-        tcp.set_flags(TcpFlags::SYN);
-        tcp.set_window(64240);
-        tcp.set_data_offset(5);
-        tcp.set_checksum(tcp_ipv4_checksum(&tcp.to_immutable(), &sip, &dip));
-    }
-    let mut ip = MutableIpv4Packet::new(&mut buf[..total_len]).expect("Buffer too small");
-    ip.set_version(4);
-    ip.set_header_length(5);
-    ip.set_total_length(total_len as u16);
-    ip.set_ttl(64);
-    ip.set_next_level_protocol(IpNextHeaderProtocols::Tcp);
-    ip.set_source(sip);
-    ip.set_destination(dip);
-    ip.set_checksum(ipv4_checksum(&ip.to_immutable()));
-    assert_eq!(ip.packet()[0] & 0x0F, 5, "IPv4 IHL not 5");
-    let buf_clone = ip.packet().to_vec();
-    debug_dump_ipv4_tcp(&buf_clone);
-    ip
-}
-
-fn debug_dump_ipv4_tcp(buf: &[u8]) {
-    if buf.len() < 40 {
-        eprintln!("[!] Buffer too small for IPv4+TCP");
-        return;
-    }
-    let ip0 = &buf[0];
-    let tcp_off_byte = buf[20 + 12];
-    eprintln!("[+] Debug dump of IPv4+TCP packet:");
-    eprintln!(
-        "\t IP[0]=0x{:02x} (ver={}, ihl={})\n\tTCP[12]=0x{:02x} (data_offs={})",
-        ip0,
-        ip0 >> 4,
-        ip0 & 0x0f,
-        tcp_off_byte,
-        tcp_off_byte >> 4
-    );
-    eprint!("IP: ");
-    for b in &buf[0..20] {
-        eprint!("{:02x} ", b);
-    }
-    eprintln!();
-    eprint!("TCP: ");
-    for b in &buf[20..40] {
-        eprint!("{:02x} ", b);
-    }
-    eprintln!();
-}
-
-fn wait_for_syn_reply_pcap(
-    iface: &str,
-    target: Ipv4Addr,
-    sport: u16,
-    overall: Duration,
-) -> Result<Option<&'static str>, pcap::Error> {
-    let mut cap = Capture::from_device(iface)?
-        .timeout(500) // ms
-        .immediate_mode(true)
-        .open()?;
-    let start = Instant::now();
-    let synack_filter = format!(
-        "ip and tcp and src host {} and dst port {} and tcp[13] & 0x12 = 0x12",
-        target, sport
-    );
-    cap.filter(&synack_filter, true)?;
-    while start.elapsed() < overall {
-        match cap.next_packet() {
-            Ok(_) => return Ok(Some("SYNACK")),
-            Err(pcap::Error::TimeoutExpired) => {
-                if start.elapsed() >= overall {
-                    break;
-                }
-                continue;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    let remaining = overall
-        .checked_sub(start.elapsed())
-        .unwrap_or_else(|| Duration::from_millis(0));
-    if remaining.is_zero() {
-        return Ok(None);
-    }
-    let rst_filter = format!(
-        "ip and tcp and src host {} and dst port {} and tcp[13] & 0x04 = 0x04",
-        target, sport
-    );
-    cap.filter(&rst_filter, true)?;
-    let start_rst = Instant::now();
-    while start_rst.elapsed() < remaining {
-        match cap.next_packet() {
-            Ok(_) => return Ok(Some("RST")),
-            Err(pcap::Error::TimeoutExpired) => continue,
-            Err(e) => return Err(e),
-        }
-    }
-
-    Ok(None)
 }
 
 pub async fn icmp_probe(logger: &Logger, cfg: &ScanConfig, target: Ipv4Addr) {
@@ -261,22 +120,7 @@ pub async fn tcp_connect_scan(logger: &Logger, cfg: &ScanConfig, target: Ipv4Add
 
 pub async fn tcp_syn_probe(cfg: &ScanConfig, sip: Ipv4Addr, target: IpAddr, logger: &Logger) {
     for port in cfg.ports.iter().cloned() {
-        let protocol = Layer4(TransportProtocol::Ipv4(IpNextHeaderProtocols::Tcp));
-        let (mut tx, mut _rx) = match transport_channel(4096, protocol) {
-            Ok(v) => v,
-            Err(e) => {
-                logger.log(ev(
-                    "tcp.error",
-                    &cfg.iface,
-                    Some(&sip.to_string()),
-                    Some(&target.to_string()),
-                    json!({ "error": e.to_string() }),
-                ));
-                continue;
-            }
-        };
         let sport: u16 = thread_rng().gen_range(1024..65535);
-        let mut buf = [0u8; 64];
         let target_as_ipv4addr = match target {
             IpAddr::V4(ip) => Ipv4Addr::from(ip),
             IpAddr::V6(_) => {
@@ -290,14 +134,7 @@ pub async fn tcp_syn_probe(cfg: &ScanConfig, sip: Ipv4Addr, target: IpAddr, logg
                 continue;
             }
         };
-        let tcp = build_ipv4_tcp_syn(&mut buf, sip, target_as_ipv4addr, sport, port);
-        assert_eq!(
-            tcp.packet().len(),
-            40,
-            "TCP SYN packet length is not 40 bytes"
-        );
-        let pkt = Ipv4Packet::new(&tcp.packet()).expect("Failed to create IPv4 packet");
-        if let Err(e) = tx.send_to(pkt, target).map(|_| ()) {
+        if let Err(e) = send_one_syn(sip, target_as_ipv4addr, sport, port) {
             logger.log(ev(
                 "tcp.error",
                 &cfg.iface,

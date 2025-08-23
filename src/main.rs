@@ -7,7 +7,8 @@ mod targets;
 use clap::Parser;
 use cli::{Cli, ScanMode};
 use recon::{
-    scanner::{icmp_probe, iface_ipv4, tcp_connect_scan, tcp_syn_probe, ScanConfig},
+    net::iface_ipv4,
+    scanner::{icmp_probe, tcp_connect_scan, tcp_syn_probe, ScanConfig},
     scheduler::{schedule, SchedulerConfig},
 };
 use sniff::start_capture;
