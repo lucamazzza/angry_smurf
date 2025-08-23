@@ -14,7 +14,7 @@ use pnet::{
 use pnet_packet::{
     icmp::{echo_request, IcmpTypes},
     ip::IpNextHeaderProtocols::{self},
-    ipv4::{checksum as ipv4_checksum, MutableIpv4Packet},
+    ipv4::{checksum as ipv4_checksum, Ipv4Packet, MutableIpv4Packet},
     tcp::{ipv4_checksum as tcp_ipv4_checksum, MutableTcpPacket, TcpFlags},
     Packet,
 };
@@ -69,7 +69,7 @@ fn build_ipv4_tcp_syn<'a>(
         tcp.set_destination(dport);
         tcp.set_sequence(0);
         tcp.set_flags(TcpFlags::SYN);
-        tcp.set_window(65535);
+        tcp.set_window(64240);
         tcp.set_data_offset(5);
         tcp.set_checksum(tcp_ipv4_checksum(&tcp.to_immutable(), &sip, &dip));
     }
@@ -82,7 +82,38 @@ fn build_ipv4_tcp_syn<'a>(
     ip.set_source(sip);
     ip.set_destination(dip);
     ip.set_checksum(ipv4_checksum(&ip.to_immutable()));
+    assert_eq!(ip.packet()[0] & 0x0F, 5, "IPv4 IHL not 5");
+    let buf_clone = ip.packet().to_vec();
+    debug_dump_ipv4_tcp(&buf_clone);
     ip
+}
+
+fn debug_dump_ipv4_tcp(buf: &[u8]) {
+    if buf.len() < 40 {
+        eprintln!("[!] Buffer too small for IPv4+TCP");
+        return;
+    }
+    let ip0 = &buf[0];
+    let tcp_off_byte = buf[20 + 12];
+    eprintln!("[+] Debug dump of IPv4+TCP packet:");
+    eprintln!(
+        "\t IP[0]=0x{:02x} (ver={}, ihl={})\n\tTCP[12]=0x{:02x} (data_offs={})",
+        ip0,
+        ip0 >> 4,
+        ip0 & 0x0f,
+        tcp_off_byte,
+        tcp_off_byte >> 4
+    );
+    eprint!("IP: ");
+    for b in &buf[0..20] {
+        eprint!("{:02x} ", b);
+    }
+    eprintln!();
+    eprint!("TCP: ");
+    for b in &buf[20..40] {
+        eprint!("{:02x} ", b);
+    }
+    eprintln!();
 }
 
 fn wait_for_syn_reply_pcap(
@@ -260,7 +291,13 @@ pub async fn tcp_syn_probe(cfg: &ScanConfig, sip: Ipv4Addr, target: IpAddr, logg
             }
         };
         let tcp = build_ipv4_tcp_syn(&mut buf, sip, target_as_ipv4addr, sport, port);
-        if let Err(e) = tx.send_to(tcp, target) {
+        assert_eq!(
+            tcp.packet().len(),
+            40,
+            "TCP SYN packet length is not 40 bytes"
+        );
+        let pkt = Ipv4Packet::new(&tcp.packet()).expect("Failed to create IPv4 packet");
+        if let Err(e) = tx.send_to(pkt, target).map(|_| ()) {
             logger.log(ev(
                 "tcp.error",
                 &cfg.iface,
