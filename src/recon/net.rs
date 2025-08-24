@@ -1,3 +1,5 @@
+//! Network-related utilities for sending and receiving packets.
+
 use std::{
     net::Ipv4Addr,
     time::{Duration, Instant},
@@ -13,6 +15,7 @@ use pnet_packet::{
     Packet,
 };
 
+/// Builds an IPv4 address from the interface name, if available.
 pub fn iface_ipv4(name: &str) -> Option<Ipv4Addr> {
     let iface = datalink::interfaces()
         .into_iter()
@@ -25,6 +28,9 @@ pub fn iface_ipv4(name: &str) -> Option<Ipv4Addr> {
     None
 }
 
+/// Builds an ICMP Echo Request packet in a mutable buffer.
+/// The buffer must be at least 64 bytes long.
+/// Returns a mutable packet that can be modified further if needed.
 pub fn build_echo_request<'a>(buf: &'a mut [u8]) -> echo_request::MutableEchoRequestPacket<'a> {
     let mut echo = echo_request::MutableEchoRequestPacket::new(buf).unwrap();
     echo.set_icmp_type(IcmpTypes::EchoRequest);
@@ -35,6 +41,16 @@ pub fn build_echo_request<'a>(buf: &'a mut [u8]) -> echo_request::MutableEchoReq
     echo
 }
 
+/// Builds an IPv4 TCP SYN packet in a mutable buffer.
+/// The buffer must be at least 40 bytes long.
+/// Returns a mutable IPv4 packet that contains the TCP SYN header.
+/// The source and destination IP addresses, as well as source and destination ports, must be
+/// provided.
+/// The function fills the buffer with the appropriate headers and calculates checksums for both
+/// IP and TCP headers.
+#[deprecated(
+    note = "Use `build_ipv4_tcp_syn_bytes_owned` instead for better ergonomics."
+)]
 fn _build_ipv4_tcp_syn<'a>(
     buf: &'a mut [u8],
     sip: std::net::Ipv4Addr,
@@ -73,6 +89,10 @@ fn _build_ipv4_tcp_syn<'a>(
     MutableIpv4Packet::new(&mut buf[..40]).unwrap()
 }
 
+/// Builds an IPv4 TCP SYN packet as a `Vec<u8>`.
+/// This function creates a new vector, fills it with the appropriate headers,
+/// and calculates checksums for both IP and TCP headers.
+/// Returns a vector containing the complete packet data.
 fn build_ipv4_tcp_syn_bytes_owned(sip: Ipv4Addr, dip: Ipv4Addr, sport: u16, dport: u16) -> Vec<u8> {
     let mut tcp_hdr = [0u8; 20];
     {
@@ -108,6 +128,12 @@ fn build_ipv4_tcp_syn_bytes_owned(sip: Ipv4Addr, dip: Ipv4Addr, sport: u16, dpor
     bytes
 }
 
+/// Debug dump for an IPv4+TCP packet.
+/// This function prints the first 20 bytes of the IPv4 header and the first 20 bytes of the TCP
+/// header.
+/// It checks the length of the buffer to ensure it contains enough data for both headers.
+/// If the buffer is too small, it prints an error message.
+/// It is useful for debugging purposes to verify the structure of the packet.
 fn _debug_dump_ipv4_tcp(buf: &[u8]) {
     if buf.len() < 40 {
         eprintln!("[!] Buffer too small for IPv4+TCP");
@@ -136,6 +162,18 @@ fn _debug_dump_ipv4_tcp(buf: &[u8]) {
     eprintln!();
 }
 
+/// Waits for a SYN-ACK or RST reply in a pcap capture on the specified interface.
+/// This function captures packets for a specified duration and checks for SYN-ACK or RST packets
+/// from the target IP address and source port.
+/// If a SYN-ACK is received, it returns "SYNACK". If a RST is received after the timeout, it
+/// returns "RST".
+/// If neither is received, it returns `None`.
+/// The function uses a timeout to avoid blocking indefinitely and allows for graceful exit if no
+/// packets are received within the specified duration.
+/// The `iface` parameter specifies the network interface to capture packets from,
+/// `target` is the target IPv4 address to filter packets by,
+/// `sport` is the source port to filter packets by,
+/// and `overall` is the total duration to wait for a reply.
 pub fn wait_for_syn_reply_pcap(
     iface: &str,
     target: Ipv4Addr,
@@ -187,6 +225,10 @@ pub fn wait_for_syn_reply_pcap(
     Ok(None)
 }
 
+/// Sends a single TCP SYN packet to the specified destination IP and port.
+/// This function uses the `pnet` library to create a transport channel and send a TCP SYN packet.
+/// It constructs the packet using the provided source and destination IP addresses and ports.
+/// It returns a `Result` indicating success or failure.
 pub fn send_one_syn(
     sip: Ipv4Addr,
     dip: Ipv4Addr,

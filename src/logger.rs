@@ -1,3 +1,5 @@
+//! Logger module for handling events and writing them to a file or `stdout`.
+
 use std::{fs::File, io::{BufWriter, Write}, path::PathBuf};
 
 use anyhow::Result;
@@ -5,6 +7,9 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tokio::sync::mpsc;
 
+/// Event structure to represent a network event.
+/// It includes a timestamp, event kind, interface name,
+/// source, and destination addresses, and additional details in JSON format.
 #[derive(Serialize, Debug, Clone)]
 pub struct Event {
     pub ts: DateTime<Utc>,
@@ -15,12 +20,14 @@ pub struct Event {
     pub details: serde_json::Value,
 }
 
+/// Logger for capturing and logging network events.
 #[derive(Clone)]
 pub struct Logger {
     tx: mpsc::UnboundedSender<Event>,
 }
 
 impl Logger {
+    /// Creates a new Logger instance, which can log events to a specified file or to `stdout`.
     pub fn new(out: Option<PathBuf>) -> Result<Self> {
         let (tx, mut rx) = mpsc::unbounded_channel::<Event>();
         match out {
@@ -54,6 +61,7 @@ impl Logger {
         Ok(Self { tx })
     }
 
+    /// Logs an event. If the timestamp is not set, it uses the current time.
     pub fn log(&self, mut ev: Event) {
         if ev.ts.timestamp_millis() == 0 {
             ev.ts = Utc::now();
@@ -62,6 +70,11 @@ impl Logger {
     }
 }
 
+/// Creates a new event with the specified parameters.
+/// The `kind` parameter specifies the type of event,
+/// `iface` is the network interface name,
+/// `src` and `dst` are optional source and destination addresses,
+/// and `details` is a JSON object containing additional information about the event.
 pub fn ev(
     kind: &str,
     iface: &str,

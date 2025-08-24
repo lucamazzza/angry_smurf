@@ -1,5 +1,12 @@
+//! Command-line interface for the angry_smurf tool.
+
 use clap::{Parser, ValueEnum};
 
+/// Represents the scan modes available for the angry_smurf tool.
+/// - `Syn`: SYN scan mode, stealthy and fast.
+/// - `Connect`: Connect scan mode, establishes a full TCP connection.
+/// - `Udp`: UDP scan mode, used for scanning UDP ports.
+/// - `All`: All scan modes combined, performing SYN, Connect, and UDP scans.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 pub enum ScanMode {
     Syn,
@@ -8,6 +15,13 @@ pub enum ScanMode {
     All,
 }
 
+/// Command-line arguments for the angry_smurf tool.
+/// This struct defines the options that can be passed to the tool when it is run.
+/// It includes options for network interface, verbosity, output file, target IP, ports to scan,
+/// delay between probes, timeout for each probe, maximum concurrent probes, and the scan mode to
+/// use.
+/// The `Cli` struct is derived from the `Parser` trait provided by the `clap` crate, which allows
+/// for easy parsing of command-line arguments.
 #[derive(Parser, Debug)]
 #[command(name = "asmurf", about = "Stealthy Network Reconnaissance Tool")]
 pub struct Cli {

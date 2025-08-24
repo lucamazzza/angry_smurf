@@ -1,3 +1,5 @@
+//! ICMP packet handler
+
 use pnet_packet::{
     icmp::{IcmpPacket, IcmpTypes},
     Packet,
@@ -6,6 +8,8 @@ use serde_json::json;
 
 use crate::logger::{ev, Logger};
 
+/// Handles ICMP packets by logging their type and relevant information.
+/// Takes the interface name, logger, and the IP header containing the ICMP packet.
 pub fn handle_icmp(iface: &str, logger: &Logger, ip_header: &pnet_packet::ipv4::Ipv4Packet) {
     if let Some(icmp) = IcmpPacket::new(ip_header.payload()) {
         let src_ip = ip_header.get_source();

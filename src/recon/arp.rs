@@ -1,9 +1,13 @@
+//! ARP packet handler
+
 use pnet_packet::arp::{ArpOperations, ArpPacket};
 use serde_json::json;
 use std::net::Ipv4Addr;
 
 use crate::logger::{ev, Logger};
 
+/// Handles ARP packets by logging their operation type and relevant information.
+/// Takes the interface name, logger, and the ARP packet data.
 pub fn handle_arp(iface: &str, logger: &Logger, pkt: &[u8]) {
     if let Some(arp) = ArpPacket::new(pkt) {
         let src_ip = Ipv4Addr::from(arp.get_sender_proto_addr());

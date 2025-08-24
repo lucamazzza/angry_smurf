@@ -1,7 +1,11 @@
+//! Parses target specifications for IPv4 addresses or CIDR ranges, including reading from a file.
+
 use std::{fs::File, io::{self, BufRead, BufReader}, net::Ipv4Addr, path::Path, str::FromStr};
 
 use ipnet::Ipv4Net;
 
+/// Parses a target specification string into a vector of IPv4 addresses.
+/// The specification can be a single IPv4 address, a CIDR range, or a file prefixed with `@`.
 pub fn parse_targets(spec: &str) -> io::Result<Vec<Ipv4Addr>> {
     if let Some(file) = spec.strip_prefix('@') {
         return read_targets_file(file);
@@ -18,6 +22,8 @@ pub fn parse_targets(spec: &str) -> io::Result<Vec<Ipv4Addr>> {
     ))
 }
 
+/// Reads a file containing target specifications, where each line can be an IPv4 address,
+/// CIDR range, or a comment (starting with `#`).
 fn read_targets_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<Ipv4Addr>> {
     let f = File::open(path)?;
     let rdr = BufReader::new(f);

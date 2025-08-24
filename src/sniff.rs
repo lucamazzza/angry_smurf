@@ -1,3 +1,5 @@
+//! This module provides functionality to capture and analyze network packets.
+
 use pcap::{Capture, Device};
 use pnet_packet::{
     ethernet::{EtherTypes, EthernetPacket},
@@ -13,6 +15,8 @@ use crate::{
     recon::{arp, dns, icmp},
 };
 
+/// Starts capturing packets on the specified network interface.
+/// It listens for ARP, ICMP, and DNS packets, and processes them accordingly.
 pub async fn start_capture(
     interface: String,
     verbose: bool,
