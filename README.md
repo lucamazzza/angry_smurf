@@ -1,6 +1,6 @@
 # Angry Smurf
 
-> [!NOTE]
+> [!WARNING]
 > Currently Work in Progress
 
 angry_smurf is a small, fast network probing tool written in Rust. It can:
