@@ -31,7 +31,7 @@ pub struct Cli {
     pub verbose: bool,
     #[arg(short, long, help = "Output buffer file [default: stdout]")]
     pub output: Option<String>,
-    #[arg(long, help = "Target IP address or hostname")]
+    #[arg(short, long, help = "Target IP address or hostname")]
     pub target: Option<String>,
     #[arg(long, default_value = "22, 80, 443", help = "Comma-separated list of ports to scan")]
     pub ports: String,
