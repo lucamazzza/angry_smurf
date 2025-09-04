@@ -186,9 +186,3 @@ Run with increased verbosity by piping to `jq` or your preferred log processor.
 ## Disclaimer
 
 Use responsibly and only on networks/hosts you own or are authorized to test. The authors and contributors are not responsible for misuse or damage.
-
----
-
-## License
-
-[Choose a license and place it in LICENSE]
