@@ -1,5 +1,8 @@
-name: Rust
-
+name: Build & Test with Cargo
+permissions:
+  contents: read
+  pull-requests: write
+  
 on:
   push:
     branches: [ "main" ]
