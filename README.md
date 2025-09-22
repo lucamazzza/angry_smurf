@@ -1,7 +1,7 @@
 # Angry Smurf
 
 > [!WARNING]
-> Currently under review
+> Currently under development
 
 angry_smurf is a small, fast network probing tool written in Rust. It can:
 - Send ICMP Echo (ping) probes.
