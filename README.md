@@ -1,4 +1,16 @@
-# Angry Smurf
+<p align='center'>
+
+<img src="https://capsule-render.vercel.app/api?type=venom&color=c1481f&height=200&section=header&text=lmgl&fontSize=90&fontColor=ffffff&animation=fadeIn&fontAlignY=35&desc=Modern%20OpenGL%20Engine%20Library&descAlignY=61&descAlign=50"/>
+
+
+</p>
+
+<p align='center'>
+
+<img src="https://img.shields.io/badge/1.92.0-23c1481f?style=for-the-badge&logo=rust&logoColor=%23c1481f&labelColor=%23ffffff&color=%23c1481f&logoSize=auto"/>
+<img src="https://img.shields.io/github/v/release/lucamazzza/lmgl?include_prereleases&sort=date&display_name=release&style=for-the-badge&label=%20"/>
+
+</p>
 
 > [!WARNING]
 > Currently under development
